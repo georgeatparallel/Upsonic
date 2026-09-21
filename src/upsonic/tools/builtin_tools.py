@@ -587,10 +587,14 @@ async def aWebSearch(
         timeout_seconds=30,
     )
     try:
-        async with handler:
+        try:
+            await handler.connect()
             response = await handler.call_tool("web_search", {
                 "objective": query, "search_queries": [query],
             })
+        finally:
+            # Setup can be cancelled before a context manager enters successfully.
+            await handler.close()
         if not isinstance(response, str):
             raise ValueError(f"Search MCP failed: {response}")
         payload = json.loads(response)

@@ -19,7 +19,7 @@ def mcp_wire(monkeypatch):
         {"title": "Second", "url": "https://example.com/second", "excerpts": ["Three"]},
     ]}}
 
-    def serve(request):
+    async def serve(request):
         requests.append(request)
         if request.method != "POST":
             return httpx.Response(405)
@@ -27,6 +27,9 @@ def mcp_wire(monkeypatch):
         if "id" not in message:
             return httpx.Response(202)
         method = message["method"]
+        if method == state.get("block_method"):
+            state["entered"].set()
+            await asyncio.Event().wait()
         if method == "initialize":
             result = {"protocolVersion": "2025-11-25", "capabilities": {"tools": {}},
                       "serverInfo": {"name": "fixture", "version": "1"}}
@@ -53,6 +56,7 @@ def mcp_wire(monkeypatch):
     def initialize(client, *args, **kwargs):
         kwargs["transport"] = httpx.MockTransport(serve)
         original(client, *args, **kwargs)
+        state.setdefault("clients", []).append(client)
 
     monkeypatch.setattr(httpx.AsyncClient, "__init__", initialize)
     return requests, state
@@ -129,3 +133,16 @@ async def test_invalid_input_never_dispatches(mcp_wire, args):
     with pytest.raises(ValueError):
         await aWebSearch(**{"query": "query", **args})
     assert not requests
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["initialize", "tools/list", "tools/call"])
+async def test_cancellation_closes_client_during_setup_and_call(mcp_wire, method):
+    _, state = mcp_wire
+    state.update(block_method=method, entered=asyncio.Event())
+    task = asyncio.create_task(aWebSearch("query", provider="parallel"))
+    await asyncio.wait_for(state["entered"].wait(), timeout=2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert all(client.is_closed for client in state["clients"])
