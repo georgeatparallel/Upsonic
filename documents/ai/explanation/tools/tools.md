@@ -783,10 +783,15 @@ Shipped builtin types:
 excludes deprecated, `BUILTIN_TOOLS_REQUIRING_CONFIG = {MCPServerTool,
 MemoryTool}`.
 
-The file also exports two **plain Python** helper functions:
+The file also exports **plain Python** helper functions:
 
-- `WebSearch(query: str, max_results: int = 10) -> str` — uses `ddgs` /
-  `duckduckgo_search` synchronously. Suitable as a quick ad-hoc tool.
+- `WebSearch(query: str, max_results: int = 10, provider="duckduckgo") -> str`
+  uses `ddgs` / `duckduckgo_search` by default. Explicit `provider="parallel"`
+  uses anonymous Search MCP through the maintained `MCPHandler`, requiring
+  `upsonic[mcp]`. `aWebSearch` is its async counterpart. Both preserve titles,
+  URLs and excerpts; Parallel's `max_results` is a local returned-source limit.
+  Queries go to Parallel with the project-wide `upsonic/<version>` User-Agent.
+  The adapter reads no Parallel credentials. See the README's backend setup.
 - `WebRead(url: str) -> str` — uses `requests` + `bs4` to fetch and clean a
   page; truncates to 5000 chars. Both are used as zero-config defaults
   when an agent requests basic web access without a paid SDK.
